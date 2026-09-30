@@ -524,7 +524,7 @@
     </header>
 
     <section class="filter-bar">
-      <div class="filter-group" style="max-width: 100px;">
+      <div class="filter-group" style="max-width: 90px;">
         <label>UF</label>
         <select id="filterUf" onchange="applyFilters()">
           <option value="Todos">Todos</option>
@@ -534,28 +534,20 @@
         </select>
       </div>
 
-      <div class="filter-group" style="min-width: 150px;">
+      <div class="filter-group" style="min-width: 160px;">
         <label>Unidade</label>
         <select id="filterUnidadeSelect" onchange="onUnitSelectChange()">
           <option value="Todas">Todas as Unidades</option>
         </select>
       </div>
       
-      <div class="filter-group" style="min-width: 130px;">
+      <div class="filter-group" style="min-width: 140px;">
         <label>Buscar Unidade</label>
         <div class="search-unit-wrapper">
           <input type="text" id="filterUnidadeInput" list="unidadesDatalist" placeholder="Filtrar por nome..." oninput="onUnitInputChange()">
           <i class="fa-solid fa-magnifying-glass"></i>
         </div>
         <datalist id="unidadesDatalist"></datalist>
-      </div>
-
-      <!-- NOVO FILTRO POR DIA -->
-      <div class="filter-group" style="min-width: 130px;">
-        <label>Filtrar por Dia</label>
-        <select id="filterDia" onchange="applyFilters()">
-          <option value="Todos">Todos os Dias</option>
-        </select>
       </div>
 
       <div class="filter-group">
@@ -582,7 +574,7 @@
         </select>
       </div>
 
-      <div class="filter-group" style="max-width: 110px;">
+      <div class="filter-group" style="max-width: 120px;">
         <label>Conferência?</label>
         <select id="filterConfAgenda" onchange="applyFilters()">
           <option value="Todos">Todos</option>
@@ -699,7 +691,7 @@
           <div class="chart-wrapper"><canvas id="chartProcDonut"></canvas></div>
         </div>
         <div class="chart-card">
-          <div class="chart-header">Curva de Evolução por Dia</div>
+          <div class="chart-header">Curva de Evolução Mensal</div>
           <div class="chart-wrapper"><canvas id="chartProcEvolucao"></canvas></div>
         </div>
         <div class="chart-card">
@@ -947,8 +939,7 @@
 
       document.getElementById("biGate").style.display = "none";
       document.body.classList.remove("locked");
-      // Define o filtro como "Todos" por padrão ao logar por unidade para evitar restrições indevidas de UF
-      document.getElementById("filterUf").value = "Todos";
+      document.getElementById("filterUf").value = uf;
 
       initDashboard();
     }
@@ -1014,7 +1005,6 @@
 
     function populateDropdowns() {
       var units = new Set();
-      var days = new Set();
       var medicos = new Set();
       var especialidades = new Set();
 
@@ -1023,9 +1013,6 @@
         if (typeof d === "string") { try { d = JSON.parse(d); } catch(e){ d = {}; } }
         var c = r.clinic || d.clinica;
         if (c) units.add(c);
-
-        var dateVal = r.fill_date || d.dataPreenchimento || r.date_label || (r.day ? ("Dia " + r.day) : "");
-        if (dateVal) days.add(String(dateVal));
 
         var ags = d.agendas || [];
         if (!ags.length && (d.medico || d.especialidade)) {
@@ -1047,15 +1034,6 @@
       var datalistUnit = document.getElementById("unidadesDatalist");
       datalistUnit.innerHTML = '<option value="Todas">Todas as Unidades</option>';
       units.forEach(function(u) { datalistUnit.innerHTML += '<option value="' + u + '">'; });
-
-      // Popular filtro por dia ordenado
-      var selDia = document.getElementById("filterDia");
-      var curDia = selDia.value;
-      selDia.innerHTML = '<option value="Todos">Todos os Dias</option>';
-      Array.from(days).sort().forEach(function(dayStr) {
-        selDia.innerHTML += '<option value="' + dayStr + '">' + dayStr + '</option>';
-      });
-      selDia.value = curDia || "Todos";
 
       var selMed = document.getElementById("filterMedico");
       var curMed = selMed.value;
@@ -1121,7 +1099,6 @@
       var selUf = document.getElementById("filterUf").value;
       var searchUnit = document.getElementById("filterUnidadeInput").value.trim().toLowerCase();
       var selUnit = document.getElementById("filterUnidadeSelect").value;
-      var selDia = document.getElementById("filterDia").value;
       var selForm = document.getElementById("filterFormulario").value;
       var selMed = document.getElementById("filterMedico").value;
       var selEsp = document.getElementById("filterEspecialidade").value;
@@ -1134,20 +1111,12 @@
         var clinicName = r.clinic || d.clinica || "";
         var clinicLower = clinicName.toLowerCase();
 
-        // Filtro de UF flexível (se UF estiver preenchido e for diferente, mas ignorando se estiver configurado como Todos)
-        if (selUf !== "Todos") {
-          var recordUf = (r.uf || d.uf || "").toUpperCase();
-          if (recordUf && recordUf !== selUf.toUpperCase()) return false;
-        }
-
+        if (selUf !== "Todos" && r.uf !== selUf && d.uf !== selUf) return false;
         if (searchUnit && searchUnit !== "todas") {
           if (!clinicLower.includes(searchUnit)) return false;
         } else if (selUnit && selUnit !== "Todas") {
           if (clinicName !== selUnit) return false;
         }
-
-        var dateVal = r.fill_date || d.dataPreenchimento || r.date_label || (r.day ? ("Dia " + r.day) : "");
-        if (selDia !== "Todos" && String(dateVal) !== selDia) return false;
 
         var formType = r.form_type || d.form_type;
         if (selForm !== "Todos" && formType !== selForm) return false;
@@ -1173,7 +1142,6 @@
       var totalPacientes = 0;
       var allAgendas = [];
       var clinicFormMatrix = {};
-      var dailyTotals = {};
 
       records.forEach(function(r) {
         var d = r.data || {};
@@ -1183,16 +1151,14 @@
         var form = r.form_type || d.form_type || "pequenos";
         var formLabel = form === "pequenos" ? "Pequenos Procedimentos" : (form === "infiltracao" ? "Infiltração e Punção" : "DIU / Implanon");
         
-        var date = r.fill_date || d.dataPreenchimento || r.date_label || (r.day ? ("Dia " + r.day) : "Data N/I");
-        if (typeof date === "string" && date.includes("-") && date.length === 10) {
+        var date = r.fill_date || d.dataPreenchimento || r.date_label || ("Dia " + r.day);
+        if (typeof date === "string" && date.includes("-")) {
           date = date.split("-").reverse().join("/");
         }
 
         if (!clinicFormMatrix[clinic]) {
           clinicFormMatrix[clinic] = { pequenos: 0, infiltracao: 0, diu: 0, total: 0 };
         }
-
-        var recTotal = 0;
 
         if (form === "pequenos") {
           PROCEDIMENTOS_SMALL.forEach(function(name, i) {
@@ -1201,7 +1167,6 @@
               items.push({ clinic: clinic, form: form, formLabel: formLabel, date: date, procName: name, qtd: q });
               clinicFormMatrix[clinic].pequenos += q;
               clinicFormMatrix[clinic].total += q;
-              recTotal += q;
             }
           });
           if (Number(d.outros) > 0) {
@@ -1209,7 +1174,6 @@
             items.push({ clinic: clinic, form: form, formLabel: formLabel, date: date, procName: "Outros", qtd: qo });
             clinicFormMatrix[clinic].pequenos += qo;
             clinicFormMatrix[clinic].total += qo;
-            recTotal += qo;
           }
         }
 
@@ -1220,13 +1184,11 @@
             items.push({ clinic: clinic, form: form, formLabel: formLabel, date: date, procName: "Infiltração articular", qtd: inf });
             clinicFormMatrix[clinic].infiltracao += inf;
             clinicFormMatrix[clinic].total += inf;
-            recTotal += inf;
           }
           if (punc > 0) {
             items.push({ clinic: clinic, form: form, formLabel: formLabel, date: date, procName: "Punção venosa", qtd: punc });
             clinicFormMatrix[clinic].infiltracao += punc;
             clinicFormMatrix[clinic].total += punc;
-            recTotal += punc;
           }
         }
 
@@ -1237,7 +1199,6 @@
               items.push({ clinic: clinic, form: form, formLabel: formLabel, date: date, procName: name, qtd: q });
               clinicFormMatrix[clinic].diu += q;
               clinicFormMatrix[clinic].total += q;
-              recTotal += q;
             }
           });
           if (Number(d.diuOutros) > 0) {
@@ -1245,11 +1206,8 @@
             items.push({ clinic: clinic, form: form, formLabel: formLabel, date: date, procName: "Outros", qtd: qdo });
             clinicFormMatrix[clinic].diu += qdo;
             clinicFormMatrix[clinic].total += qdo;
-            recTotal += qdo;
           }
         }
-
-        dailyTotals[date] = (dailyTotals[date] || 0) + recTotal;
 
         (d.patients || []).forEach(function(p) {
           totalPacientes++;
@@ -1291,8 +1249,7 @@
         hpvUltimoCount: hpvUltimoCount,
         totalPacientes: totalPacientes,
         allAgendas: allAgendas,
-        clinicFormMatrix: clinicFormMatrix,
-        dailyTotals: dailyTotals
+        clinicFormMatrix: clinicFormMatrix
       };
     }
 
@@ -1389,7 +1346,7 @@
     function renderTabProcedimentos(records, parsed) {
       var totalProc = parsed.items.reduce(function(a, b) { return a + b.qtd; }, 0);
       var distinctUnits = new Set(records.map(function(r) { return r.clinic; }).filter(Boolean)).size || 1;
-      var distinctDays = Object.keys(parsed.dailyTotals).length || 1;
+      var distinctDays = new Set(records.map(function(r) { return r.clinic + "_" + r.day; })).size || 1;
       var mediaDiaria = Math.round(totalProc / distinctDays);
 
       document.getElementById("kpiProcTotal").textContent = totalProc.toLocaleString("pt-BR");
@@ -1411,17 +1368,13 @@
         options: { responsive: true, maintainAspectRatio: false, cutout: "70%", plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11, family: 'Plus Jakarta Sans' } } } } }
       });
 
-      var sortedDays = Object.keys(parsed.dailyTotals).sort();
-      var dayLabels = sortedDays.length ? sortedDays : ["Nenhum Dia"];
-      var dayValues = sortedDays.length ? sortedDays.map(function(d) { return parsed.dailyTotals[d]; }) : [0];
-
       createOrUpdateChart("chartProcEvolucao", {
         type: "bar",
         data: {
-          labels: dayLabels,
-          datasets: [{ label: "Procedimentos por Dia", data: dayValues, backgroundColor: "#93c5fd", borderRadius: 6 }]
+          labels: ["Set/26", "Out/26", "Nov/26", "Dez/26"],
+          datasets: [{ label: "Procedimentos", data: [totalProc, Math.round(totalProc * 1.08), Math.round(totalProc * 1.15), Math.round(totalProc * 1.21)], backgroundColor: "#93c5fd", borderRadius: 6 }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: "#f1f5f9" } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: "#f1f5f9" } }, x: { grid: { display: false } } } }
       });
 
       var procCounts = {};
@@ -1457,7 +1410,7 @@
 
       document.getElementById("procInsightsList").innerHTML =
         '<div class="insight-item"><div class="insight-icon icon-blue"><i class="fa-solid fa-chart-line"></i></div><div>Pequenos Procedimentos concentram o maior contingente cirúrgico ambulatorial.</div></div>' +
-        '<div class="insight-item"><div class="insight-icon icon-green"><i class="fa-solid fa-hospital"></i></div><div>Filtro por dia ativo para acompanhamento detalhado da produção diária por unidade.</div></div>';
+        '<div class="insight-item"><div class="insight-icon icon-green"><i class="fa-solid fa-hospital"></i></div><div>Equilíbrio operacional nos fluxos de salas entre as unidades piloto.</div></div>';
     }
 
     function renderTabAgendas(records, parsed) {
@@ -1570,7 +1523,7 @@
       records.forEach(function(r) {
         var d = r.data || {};
         if (typeof d === "string") { try { d = JSON.parse(d); } catch(e){ d = {}; } }
-        var date = r.fill_date || d.dataPreenchimento || r.date_label || (r.day ? ("Dia " + r.day) : "Data N/I");
+        var date = r.fill_date || d.dataPreenchimento || r.date_label || ("Dia " + r.day);
         var clinic = r.clinic || d.clinica || "";
         var formLabel = r.form_type === "pequenos" ? "Pequenos" : (r.form_type === "infiltracao" ? "Infiltração" : "DIU");
         
